@@ -40,6 +40,9 @@ dependencies:
   device_information: ^0.0.4
   platform_device_id: ^1.0.1
   system_info2: ^4.0.0
+  flutter_typeahead: ^4.8.0
+  expansion_tile_card: ^3.0.0
+  flutter_keyboard_visibility: ^5.4.1
 
 dev_dependencies:
   flutter_test:

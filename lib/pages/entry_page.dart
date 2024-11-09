@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
+import 'package:expansion_tile_card/expansion_tile_card.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:flutter/cupertino.dart';
 
 class EntryPage extends StatefulWidget {
@@ -9,20 +10,14 @@ class EntryPage extends StatefulWidget {
   State<EntryPage> createState() => _EntryPageState();
 }
 
-class _EntryPageState extends State<EntryPage> {
+class _EntryPageState extends State<EntryPage>
+    with SingleTickerProviderStateMixin {
   // 控制器
-  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _modelController = TextEditingController();
   final TextEditingController _serialController = TextEditingController();
   final TextEditingController _batteryController = TextEditingController();
-  Timer? _debounceTimer;
-
-  // 搜索相关
-  List<String> _searchResults = [];
-  bool _isSearching = false;
 
   // 版本选择相关
-  bool _isNetworkExpanded = false;
-  bool _isCountryExpanded = false;
   String _selectedNetwork = '全网通';
   String _selectedCountry = '国行';
   String _selectedWarranty = '有保';
@@ -32,342 +27,112 @@ class _EntryPageState extends State<EntryPage> {
   int _selectedStaffIndex = 0;
   String? _selectedStaff;
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  // 添加 ExpansionTile 的 key
+  final GlobalKey<ExpansionTileCardState> networkKey = GlobalKey();
+  final GlobalKey<ExpansionTileCardState> countryKey = GlobalKey();
+  final GlobalKey<ExpansionTileCardState> warrantyKey = GlobalKey();
+
+  // 添加动画控制器
+  late AnimationController _animationController;
+
+  int? _tempSelectedStaffIndex;
+
+  // 添加动画控制器映射
+  final Map<GlobalKey<ExpansionTileCardState>, bool> _isExpandedMap = {};
+
+  void _showStaffPicker() {
+    showModalBottomSheet(
+      context: context,
       backgroundColor: Colors.transparent,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF26263A), Color(0xFF1F1F1F)],
+      builder: (BuildContext context) {
+        return Container(
+          height: 300,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(20),
+            ),
           ),
-        ),
-        child: SafeArea(
           child: Column(
             children: [
-              _buildHeader(),
-              const SizedBox(height: 16),
-              _buildDeviceInfoCard(),
-              const SizedBox(height: 16),
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSearchField(),
-                        const SizedBox(height: 12),
-                        _buildSerialField(),
-                        const SizedBox(height: 12),
-                        _buildNetworkSection(),
-                        const SizedBox(height: 12),
-                        _buildCountrySection(),
-                        const SizedBox(height: 12),
-                        _buildWarrantySection(),
-                        const SizedBox(height: 12),
-                        _buildBatterySection(),
-                        const SizedBox(height: 12),
-                        _buildStaffSection(),
-                        const SizedBox(height: 12),
-                        _buildQualitySection(),
-                      ],
-                    ),
+              // 顶部标题栏
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
                   ),
-                ),
-              ),
-              _buildStartButton(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _debounceTimer?.cancel();
-    _searchController.dispose();
-    _serialController.dispose();
-    _batteryController.dispose();
-    super.dispose();
-  }
-
-  // 头部构建
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          const BackButton(color: Colors.white),
-          const Text(
-            '博森科技',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.only(left: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.red,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: const Text(
-              '官方质检',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 设备信息卡片
-  Widget _buildDeviceInfoCard() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text(
-            'iPhone 14 Pro Max',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF1F1F1F),
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            '内存：4G+256G    串码：456789123456789',
-            style: TextStyle(
-              fontSize: 14,
-              color: Color(0xFF1F1F1F),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 搜索字段
-  Widget _buildSearchField() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      height: 56,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          const Text(
-            '型号',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF1F1F1F),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: '请搜索并确认型号全称',
-                hintStyle: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 通用版本选择部分
-  Widget _buildVersionSection(
-    String title,
-    List<String> options,
-    bool isExpanded,
-    Function(bool) onExpanded,
-    String selectedValue,
-    Function(String) onSelected,
-  ) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: () => onExpanded(!isExpanded),
-            child: Container(
-              height: 56,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF1F1F1F),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      offset: const Offset(0, 1),
+                      blurRadius: 8,
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      selectedValue,
-                      style: const TextStyle(
-                        fontSize: 14,
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(
+                        '取消',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      '选择员工',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
                         color: Color(0xFF1F1F1F),
                       ),
                     ),
-                  ),
-                  Icon(
-                    Icons.keyboard_arrow_down,
-                    color: Colors.grey[400],
-                    size: 24,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (isExpanded)
-            Container(
-              padding: const EdgeInsets.fromLTRB(80, 0, 16, 16),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: options.map((option) {
-                  return GestureDetector(
-                    onTap: () {
-                      onSelected(option);
-                      onExpanded(false);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: selectedValue == option
-                            ? const Color(0xFF26263A)
-                            : const Color(0xFFF5F5F5),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Text(
-                        option,
+                    TextButton(
+                      onPressed: () {
+                        if (_tempSelectedStaffIndex != null) {
+                          setState(() {
+                            _selectedStaffIndex = _tempSelectedStaffIndex!;
+                            _selectedStaff = _staffList[_selectedStaffIndex];
+                          });
+                        }
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        '确定',
                         style: TextStyle(
-                          color: selectedValue == option
-                              ? Colors.white
-                              : const Color(0xFF1F1F1F),
-                          fontSize: 14,
+                          color: Color(0xFF26263A),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // 网络版本部分
-  Widget _buildNetworkSection() {
-    return _buildVersionSection(
-      '网络版本',
-      ['全网通', '移动版', '电信版'],
-      _isNetworkExpanded,
-      (expanded) => setState(() => _isNetworkExpanded = expanded),
-      _selectedNetwork,
-      (selected) => setState(() => _selectedNetwork = selected),
-    );
-  }
-
-  // 国家版本部分
-  Widget _buildCountrySection() {
-    return _buildVersionSection(
-      '国家版本',
-      ['国行', '港行', '美版'],
-      _isCountryExpanded,
-      (expanded) => setState(() => _isCountryExpanded = expanded),
-      _selectedCountry,
-      (selected) => setState(() => _selectedCountry = selected),
-    );
-  }
-
-  // 保修状态部分
-  Widget _buildWarrantySection() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Text(
-                '保修状态',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF1F1F1F),
+                  ],
                 ),
               ),
-              const SizedBox(width: 16),
+              // 滚动选择器
               Expanded(
-                child: Wrap(
-                  spacing: 12,
-                  children: ['有保', '过保'].map((option) {
-                    return GestureDetector(
-                      onTap: () => setState(() => _selectedWarranty = option),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _selectedWarranty == option
-                              ? const Color(0xFF26263A)
-                              : const Color(0xFFF5F5F5),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Text(
-                          option,
-                          style: TextStyle(
-                            color: _selectedWarranty == option
-                                ? Colors.white
-                                : const Color(0xFF1F1F1F),
-                            fontSize: 14,
-                          ),
+                child: CupertinoPicker(
+                  backgroundColor: Colors.white,
+                  itemExtent: 44,
+                  scrollController: FixedExtentScrollController(
+                    initialItem: _selectedStaffIndex,
+                  ),
+                  onSelectedItemChanged: (int index) {
+                    _tempSelectedStaffIndex = index;
+                  },
+                  children: _staffList.map((staff) {
+                    return Center(
+                      child: Text(
+                        staff,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Color(0xFF1F1F1F),
                         ),
                       ),
                     );
@@ -376,8 +141,243 @@ class _EntryPageState extends State<EntryPage> {
               ),
             ],
           ),
-        ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        // 点击空白处收起键盘
+        FocusScope.of(context).unfocus();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF26263A), Color(0xFF1F1F1F)],
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              children: [
+                _buildHeader(),
+                const SizedBox(height: 16),
+                _buildDeviceInfoCard(),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSearchField(),
+                          const SizedBox(height: 12),
+                          _buildSerialField(),
+                          const SizedBox(height: 12),
+                          _buildNetworkSection(),
+                          const SizedBox(height: 12),
+                          _buildCountrySection(),
+                          const SizedBox(height: 12),
+                          _buildWarrantySection(),
+                          const SizedBox(height: 12),
+                          _buildBatterySection(),
+                          const SizedBox(height: 12),
+                          _buildStaffSection(),
+                          const SizedBox(height: 12),
+                          _buildQualitySection(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _buildStartButton(),
+              ],
+            ),
+          ),
+        ),
       ),
+    );
+  }
+
+  // 搜索字段（使用 TypeAheadField 实现自动完成）
+  Widget _buildSearchField() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: TypeAheadField(
+        textFieldConfiguration: TextFieldConfiguration(
+          controller: _modelController,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Color(0xFF1F1F1F),
+          ),
+          decoration: InputDecoration(
+            prefixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(width: 16),
+                const Text(
+                  '型号',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF1F1F1F),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Icon(
+                  Icons.search,
+                  color: Colors.grey[400],
+                  size: 20,
+                ),
+              ],
+            ),
+            prefixIconConstraints: const BoxConstraints(minWidth: 100),
+            hintText: '请搜索并确认型号全称',
+            hintStyle: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 14,
+            ),
+            border: InputBorder.none,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            // 添加清除按钮
+            suffixIcon: _modelController.text.isNotEmpty
+                ? GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _modelController.clear();
+                      });
+                    },
+                    child: Icon(
+                      Icons.cancel,
+                      color: Colors.grey[400],
+                      size: 20,
+                    ),
+                  )
+                : null,
+          ),
+        ),
+        suggestionsCallback: (pattern) async {
+          // 这里可以替换为实际的API调用
+          return [
+            'iPhone 14',
+            'iPhone 14 Plus',
+            'iPhone 14 Pro',
+            'iPhone 14 Pro Max',
+            'iPhone 13',
+            'iPhone 13 Pro',
+            'iPhone 13 Pro Max',
+          ]
+              .where(
+                  (item) => item.toLowerCase().contains(pattern.toLowerCase()))
+              .toList();
+        },
+        suggestionsBoxDecoration: SuggestionsBoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          elevation: 4,
+          color: Colors.white,
+          constraints: const BoxConstraints(maxHeight: 200),
+        ),
+        transitionBuilder: (context, suggestionsBox, controller) {
+          return suggestionsBox;
+        },
+        itemBuilder: (context, suggestion) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Text(
+              suggestion.toString(),
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF1F1F1F),
+              ),
+            ),
+          );
+        },
+        onSuggestionSelected: (suggestion) {
+          _modelController.text = suggestion.toString();
+        },
+        hideOnEmpty: true,
+        hideOnLoading: true,
+        hideSuggestionsOnKeyboardHide: false,
+        keepSuggestionsOnLoading: false,
+        animationDuration: const Duration(milliseconds: 300),
+        direction: AxisDirection.down,
+      ),
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    // 延迟执行入场动画
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _animationController.forward();
+    });
+    _modelController.addListener(() {
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _modelController.dispose();
+    _serialController.dispose();
+    _batteryController.dispose();
+    _isExpandedMap.clear();
+    super.dispose();
+  }
+
+  // 网络版本部分
+  Widget _buildNetworkSection() {
+    return _buildExpansionSection(
+      key: networkKey,
+      title: '网络版本',
+      selectedValue: _selectedNetwork,
+      options: ['全网通', '移动版', '电信版'],
+      onSelected: (value) => setState(() => _selectedNetwork = value),
+    );
+  }
+
+  // 国家版本部分
+  Widget _buildCountrySection() {
+    return _buildExpansionSection(
+      key: countryKey,
+      title: '国家版本',
+      selectedValue: _selectedCountry,
+      options: ['国行', '港行', '美版'],
+      onSelected: (value) => setState(() => _selectedCountry = value),
+    );
+  }
+
+  // 保修状态部分
+  Widget _buildWarrantySection() {
+    return _buildExpansionSection(
+      key: warrantyKey,
+      title: '保修状态',
+      selectedValue: _selectedWarranty,
+      options: ['有保', '过保'],
+      onSelected: (value) => setState(() => _selectedWarranty = value),
     );
   }
 
@@ -406,6 +406,10 @@ class _EntryPageState extends State<EntryPage> {
             child: TextField(
               controller: _batteryController,
               keyboardType: TextInputType.number,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF1F1F1F),
+              ),
               decoration: InputDecoration(
                 hintText: '请输入 %',
                 hintStyle: TextStyle(
@@ -413,7 +417,6 @@ class _EntryPageState extends State<EntryPage> {
                   fontSize: 14,
                 ),
                 border: InputBorder.none,
-                suffixText: '%',
               ),
             ),
           ),
@@ -424,16 +427,23 @@ class _EntryPageState extends State<EntryPage> {
 
   // 员工选择部分
   Widget _buildStaffSection() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      height: 56,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: InkWell(
-        onTap: _showStaffPicker,
+    return GestureDetector(
+      onTap: _showStaffPicker,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        height: 56,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
         child: Row(
           children: [
             const Text(
@@ -502,82 +512,131 @@ class _EntryPageState extends State<EntryPage> {
     );
   }
 
-  // 员工选择弹窗
-  void _showStaffPicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: 300,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  // 开始检测按钮
+  Widget _buildStartButton() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton(
+        onPressed: () {
+          // TODO: 实现检测逻辑
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF26263A),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(25),
+          ),
         ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: Colors.grey[200]!),
+        child: const Text(
+          '开始检测',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 头部构建
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          const BackButton(color: Colors.white),
+          const Text(
+            '博森科技',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.only(left: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.red,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              '官方质检',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 设备信息卡片
+  Widget _buildDeviceInfoCard() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Text(
+                'iPhone 14 Pro Max',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF1F1F1F),
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(
-                      '取消',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                  const Text(
-                    '选择采购员工',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _selectedStaff = _staffList[_selectedStaffIndex];
-                      });
-                      Navigator.pop(context);
-                    },
-                    child: const Text(
-                      '确定',
-                      style: TextStyle(
-                        color: Color(0xFF26263A),
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: const [
+              Text(
+                '内存：',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF1F1F1F),
+                ),
               ),
-            ),
-            Expanded(
-              child: CupertinoPicker(
-                itemExtent: 44,
-                onSelectedItemChanged: (index) {
-                  setState(() => _selectedStaffIndex = index);
-                },
-                children: _staffList.map((staff) {
-                  return Center(
-                    child: Text(
-                      staff,
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                  );
-                }).toList(),
+              Text(
+                '4G+256G',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF1F1F1F),
+                ),
               ),
-            ),
-          ],
-        ),
+              SizedBox(width: 16),
+              Text(
+                '串码：',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF1F1F1F),
+                ),
+              ),
+              Text(
+                '456789123456789',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF1F1F1F),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -626,31 +685,119 @@ class _EntryPageState extends State<EntryPage> {
     );
   }
 
-  // 开始检测按钮
-  Widget _buildStartButton() {
+  // 优化折叠面板的通用构建方法
+  Widget _buildExpansionSection({
+    required GlobalKey<ExpansionTileCardState> key,
+    required String title,
+    required String selectedValue,
+    required List<String> options,
+    required Function(String) onSelected,
+  }) {
+    // 确保 key 在 map 中有对应的值
+    _isExpandedMap[key] ??= false;
+
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      width: double.infinity,
-      height: 50,
-      child: ElevatedButton(
-        onPressed: () {
-          // TODO: 实现检测逻辑
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: ExpansionTileCard(
+        key: key,
+        baseColor: Colors.white,
+        expandedColor: Colors.white.withOpacity(0.95),
+        elevation: 0,
+        initialElevation: 0,
+        borderRadius: BorderRadius.circular(16),
+        duration: const Duration(milliseconds: 200),
+        shadowColor: Colors.black12,
+        trailing: AnimatedRotation(
+          duration: const Duration(milliseconds: 200),
+          turns: _isExpandedMap[key]! ? 0.5 : 0,
+          child: Icon(
+            Icons.keyboard_arrow_down,
+            color: Colors.grey[600],
+          ),
+        ),
+        onExpansionChanged: (expanded) {
+          setState(() {
+            _isExpandedMap[key] = expanded;
+          });
         },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF26263A),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(25),
-          ),
-          elevation: 0,
+        title: Row(
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF1F1F1F),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              selectedValue,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF1F1F1F),
+              ),
+            ),
+          ],
         ),
-        child: const Text(
-          '开始检测',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: options.map((option) {
+                final isSelected = selectedValue == option;
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      onSelected(option);
+                      key.currentState?.collapse();
+                      setState(() {
+                        _isExpandedMap[key] = false; // 更新箭头状态
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(18),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFF26263A)
+                            : const Color(0xFFF5F5F5),
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color:
+                                      const Color(0xFF26263A).withOpacity(0.2),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: Text(
+                        option,
+                        style: TextStyle(
+                          color: isSelected
+                              ? Colors.white
+                              : const Color(0xFF1F1F1F),
+                          fontSize: 14,
+                          fontWeight:
+                              isSelected ? FontWeight.w500 : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
